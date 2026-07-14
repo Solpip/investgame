@@ -1,1 +1,398 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Investeringsspill</title>
+<style>
+  :root {
+    --bg: #0e1117;
+    --panel: #161b22;
+    --border: #2a313c;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --up: #26a269;
+    --down: #e5484d;
+    --accent: #388bfd;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 20px;
+  }
+  .app {
+    width: 100%;
+    max-width: 820px;
+  }
+  h1 {
+    font-size: 1.4rem;
+    margin: 0 0 16px;
+    font-weight: 600;
+  }
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+  }
+  .card .label {
+    color: var(--muted);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 6px;
+  }
+  .card .value {
+    font-size: 1.25rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .chart-wrap {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 16px;
+  }
+  .price-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .price {
+    font-size: 1.6rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .change {
+    font-size: 0.95rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  canvas {
+    width: 100%;
+    height: 260px;
+    display: block;
+  }
+  .controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .amount-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .amount-row label { color: var(--muted); font-size: 0.85rem; }
+  input[type="number"] {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 1rem;
+    width: 120px;
+  }
+  .chip {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 999px;
+    padding: 5px 12px;
+    font-size: 0.8rem;
+    cursor: pointer;
+  }
+  .chip:hover { color: var(--text); border-color: var(--accent); }
+  button.trade {
+    border: none;
+    border-radius: 10px;
+    padding: 14px;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    color: #fff;
+  }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .buy { background: var(--up); }
+  .sell { background: var(--down); }
+  .up { color: var(--up); }
+  .down { color: var(--down); }
+  .footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  .reset {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 8px;
+    padding: 6px 12px;
+    cursor: pointer;
+  }
+  .reset:hover { color: var(--text); }
+  @media (max-width: 620px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>📈 Investeringsspill</h1>
 
+  <div class="stats">
+    <div class="card">
+      <div class="label">Kontanter</div>
+      <div class="value" id="cash">1000,00 kr</div>
+    </div>
+    <div class="card">
+      <div class="label">Aksjer</div>
+      <div class="value" id="shares">0</div>
+    </div>
+    <div class="card">
+      <div class="label">Aksjeverdi</div>
+      <div class="value" id="holdings">0,00 kr</div>
+    </div>
+    <div class="card">
+      <div class="label">Totalformue</div>
+      <div class="value" id="networth">1000,00 kr</div>
+    </div>
+  </div>
+
+  <div class="chart-wrap">
+    <div class="price-row">
+      <div class="price" id="price">100,00 kr</div>
+      <div class="change" id="change">0,00 %</div>
+    </div>
+    <canvas id="chart"></canvas>
+  </div>
+
+  <div class="amount-row">
+    <label for="qty">Antall aksjer:</label>
+    <input type="number" id="qty" min="1" step="1" value="1" />
+    <span class="chip" data-act="max-buy">Maks kjøp</span>
+    <span class="chip" data-act="all-sell">Selg alt</span>
+  </div>
+
+  <div class="controls">
+    <button class="trade buy" id="buyBtn">Kjøp</button>
+    <button class="trade sell" id="sellBtn">Selg</button>
+  </div>
+
+  <div class="footer">
+    <span id="pnl">Resultat: 0,00 kr (0,00 %)</span>
+    <button class="reset" id="resetBtn">Nullstill spill</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  const START_CASH = 1000;
+  const MAX_POINTS = 120;
+
+  // --- Game state ---
+  let state = load() || {
+    cash: START_CASH,
+    shares: 0,
+    price: 100,
+    history: [100],
+  };
+
+  // --- Formatting helpers ---
+  const nf = new Intl.NumberFormat("nb-NO", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const kr = (n) => nf.format(n) + " kr";
+  const pct = (n) => nf.format(n) + " %";
+
+  // --- DOM ---
+  const el = (id) => document.getElementById(id);
+  const cashEl = el("cash"), sharesEl = el("shares"), holdingsEl = el("holdings"),
+        networthEl = el("networth"), priceEl = el("price"), changeEl = el("change"),
+        pnlEl = el("pnl"), qtyEl = el("qty");
+  const buyBtn = el("buyBtn"), sellBtn = el("sellBtn"), resetBtn = el("resetBtn");
+  const canvas = el("chart"), ctx = canvas.getContext("2d");
+
+  // --- Price simulation: random walk ---
+  function tick() {
+    const prev = state.price;
+    // Percentage change per tick, slight upward drift, occasional shocks.
+    let drift = 0.0004;
+    let vol = 0.02;
+    if (Math.random() < 0.03) vol = 0.07; // occasional bigger swing
+    const changePct = drift + (Math.random() - 0.5) * 2 * vol;
+    let next = prev * (1 + changePct);
+    if (next < 1) next = 1; // floor so it never dies completely
+    state.price = Math.round(next * 100) / 100;
+    state.history.push(state.price);
+    if (state.history.length > MAX_POINTS) state.history.shift();
+    render();
+    save();
+  }
+
+  // --- Trading ---
+  function qty() {
+    const v = Math.floor(Number(qtyEl.value));
+    return isFinite(v) && v > 0 ? v : 0;
+  }
+
+  function buy() {
+    const n = qty();
+    const cost = n * state.price;
+    if (n <= 0 || cost > state.cash + 1e-9) return;
+    state.cash -= cost;
+    state.shares += n;
+    render(); save();
+  }
+
+  function sell() {
+    const n = qty();
+    if (n <= 0 || n > state.shares) return;
+    state.cash += n * state.price;
+    state.shares -= n;
+    render(); save();
+  }
+
+  // --- Rendering ---
+  function render() {
+    const holdings = state.shares * state.price;
+    const networth = state.cash + holdings;
+
+    cashEl.textContent = kr(state.cash);
+    sharesEl.textContent = state.shares;
+    holdingsEl.textContent = kr(holdings);
+    networthEl.textContent = kr(networth);
+    priceEl.textContent = kr(state.price);
+
+    // Change vs previous tick
+    const h = state.history;
+    const prev = h.length > 1 ? h[h.length - 2] : state.price;
+    const chPct = prev ? ((state.price - prev) / prev) * 100 : 0;
+    changeEl.textContent = (chPct >= 0 ? "▲ " : "▼ ") + pct(Math.abs(chPct));
+    changeEl.className = "change " + (chPct >= 0 ? "up" : "down");
+
+    // Total P&L vs starting cash
+    const pnl = networth - START_CASH;
+    const pnlPct = (pnl / START_CASH) * 100;
+    pnlEl.textContent = "Resultat: " + kr(pnl) + " (" + pct(pnlPct) + ")";
+    pnlEl.className = pnl >= 0 ? "up" : "down";
+
+    // Button states
+    buyBtn.disabled = qty() * state.price > state.cash + 1e-9;
+    sellBtn.disabled = qty() > state.shares || qty() <= 0;
+
+    drawChart();
+  }
+
+  function drawChart() {
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.clientWidth, hgt = canvas.clientHeight;
+    canvas.width = w * dpr; canvas.height = hgt * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, hgt);
+
+    const data = state.history;
+    if (data.length < 2) return;
+
+    const pad = 8;
+    const min = Math.min(...data), max = Math.max(...data);
+    const range = max - min || 1;
+    const x = (i) => pad + (i / (data.length - 1)) * (w - 2 * pad);
+    const y = (v) => hgt - pad - ((v - min) / range) * (hgt - 2 * pad);
+
+    const rising = data[data.length - 1] >= data[0];
+    const color = rising ? "#26a269" : "#e5484d";
+
+    // Gradient fill under the line
+    const grad = ctx.createLinearGradient(0, 0, 0, hgt);
+    grad.addColorStop(0, rising ? "rgba(38,162,105,0.28)" : "rgba(229,72,77,0.28)");
+    grad.addColorStop(1, "rgba(0,0,0,0)");
+
+    ctx.beginPath();
+    ctx.moveTo(x(0), y(data[0]));
+    for (let i = 1; i < data.length; i++) ctx.lineTo(x(i), y(data[i]));
+    ctx.lineTo(x(data.length - 1), hgt - pad);
+    ctx.lineTo(x(0), hgt - pad);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // Line
+    ctx.beginPath();
+    ctx.moveTo(x(0), y(data[0]));
+    for (let i = 1; i < data.length; i++) ctx.lineTo(x(i), y(data[i]));
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.lineJoin = "round";
+    ctx.stroke();
+
+    // Last point dot
+    const lx = x(data.length - 1), ly = y(data[data.length - 1]);
+    ctx.beginPath();
+    ctx.arc(lx, ly, 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+  }
+
+  // --- Persistence ---
+  function save() {
+    try { localStorage.setItem("investgame", JSON.stringify(state)); } catch (e) {}
+  }
+  function load() {
+    try {
+      const raw = localStorage.getItem("investgame");
+      if (!raw) return null;
+      const s = JSON.parse(raw);
+      if (typeof s.cash === "number" && Array.isArray(s.history)) return s;
+    } catch (e) {}
+    return null;
+  }
+
+  function reset() {
+    state = { cash: START_CASH, shares: 0, price: 100, history: [100] };
+    save(); render();
+  }
+
+  // --- Events ---
+  buyBtn.addEventListener("click", buy);
+  sellBtn.addEventListener("click", sell);
+  resetBtn.addEventListener("click", reset);
+  qtyEl.addEventListener("input", render);
+
+  document.querySelectorAll(".chip").forEach((c) => {
+    c.addEventListener("click", () => {
+      const act = c.getAttribute("data-act");
+      if (act === "max-buy") qtyEl.value = Math.floor(state.cash / state.price) || 1;
+      if (act === "all-sell") qtyEl.value = state.shares || 1;
+      render();
+    });
+  });
+
+  window.addEventListener("resize", drawChart);
+
+  // --- Start ---
+  render();
+  setInterval(tick, 1000);
+})();
+</script>
+</body>
+</html>
