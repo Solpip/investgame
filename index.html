@@ -232,6 +232,9 @@
   const buyBtn = el("buyBtn"), sellBtn = el("sellBtn"), resetBtn = el("resetBtn");
   const canvas = el("chart"), ctx = canvas.getContext("2d");
 
+  const TICK_MS = 1000;
+  let lastTickAt = performance.now();
+
   // --- Price simulation: random walk ---
   function tick() {
     const prev = state.price;
@@ -245,6 +248,7 @@
     state.price = Math.round(next * 100) / 100;
     state.history.push(state.price);
     if (state.history.length > MAX_POINTS) state.history.shift();
+    lastTickAt = performance.now();
     render();
     save();
   }
@@ -303,6 +307,10 @@
     drawChart();
   }
 
+  function easeOutCubic(t) {
+    return 1 - Math.pow(1 - t, 3);
+  }
+
   function drawChart() {
     const dpr = window.devicePixelRatio || 1;
     const w = canvas.clientWidth, hgt = canvas.clientHeight;
@@ -310,8 +318,18 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, hgt);
 
-    const data = state.history;
-    if (data.length < 2) return;
+    const raw = state.history;
+    if (raw.length < 2) return;
+
+    // Animate the newest point easing in from the previous one, instead of
+    // jumping straight to it, so the line moves smoothly between ticks.
+    const data = raw.slice();
+    const elapsed = performance.now() - lastTickAt;
+    const t = Math.min(1, elapsed / TICK_MS);
+    const eased = easeOutCubic(t);
+    const from = data[data.length - 2];
+    const to = data[data.length - 1];
+    data[data.length - 1] = from + (to - from) * eased;
 
     const pad = 8;
     const min = Math.min(...data), max = Math.max(...data);
@@ -319,8 +337,24 @@
     const x = (i) => pad + (i / (data.length - 1)) * (w - 2 * pad);
     const y = (v) => hgt - pad - ((v - min) / range) * (hgt - 2 * pad);
 
+    const points = data.map((v, i) => [x(i), y(v)]);
     const rising = data[data.length - 1] >= data[0];
     const color = rising ? "#26a269" : "#e5484d";
+
+    // Build a smooth path through the points using quadratic curves
+    // between successive midpoints (Catmull-Rom-ish smoothing).
+    function tracePath() {
+      ctx.moveTo(points[0][0], points[0][1]);
+      for (let i = 1; i < points.length - 1; i++) {
+        const [cx, cy] = points[i];
+        const [nx, ny] = points[i + 1];
+        const mx = (cx + nx) / 2;
+        const my = (cy + ny) / 2;
+        ctx.quadraticCurveTo(cx, cy, mx, my);
+      }
+      const last = points[points.length - 1];
+      ctx.lineTo(last[0], last[1]);
+    }
 
     // Gradient fill under the line
     const grad = ctx.createLinearGradient(0, 0, 0, hgt);
@@ -328,8 +362,7 @@
     grad.addColorStop(1, "rgba(0,0,0,0)");
 
     ctx.beginPath();
-    ctx.moveTo(x(0), y(data[0]));
-    for (let i = 1; i < data.length; i++) ctx.lineTo(x(i), y(data[i]));
+    tracePath();
     ctx.lineTo(x(data.length - 1), hgt - pad);
     ctx.lineTo(x(0), hgt - pad);
     ctx.closePath();
@@ -338,15 +371,15 @@
 
     // Line
     ctx.beginPath();
-    ctx.moveTo(x(0), y(data[0]));
-    for (let i = 1; i < data.length; i++) ctx.lineTo(x(i), y(data[i]));
+    tracePath();
     ctx.strokeStyle = color;
     ctx.lineWidth = 2;
     ctx.lineJoin = "round";
+    ctx.lineCap = "round";
     ctx.stroke();
 
     // Last point dot
-    const lx = x(data.length - 1), ly = y(data[data.length - 1]);
+    const [lx, ly] = points[points.length - 1];
     ctx.beginPath();
     ctx.arc(lx, ly, 3.5, 0, Math.PI * 2);
     ctx.fillStyle = color;
@@ -389,9 +422,17 @@
 
   window.addEventListener("resize", drawChart);
 
+  // --- Animation loop: redraw chart every frame for smooth motion ---
+  function animate() {
+    drawChart();
+    requestAnimationFrame(animate);
+  }
+
   // --- Start ---
   render();
-  setInterval(tick, 1000);
+  lastTickAt = performance.now();
+  requestAnimationFrame(animate);
+  setInterval(tick, TICK_MS);
 })();
 </script>
 </body>
